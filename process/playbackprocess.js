@@ -1,7 +1,7 @@
 wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 	_lastApp: null,
 	started: false,
-	minBuffSize: 1024*32,
+	minBuffSize: 1024*32, // ~ 32 Kilobytes
 	frequency: null,
 	channels: null,
 	audioContext: null,
@@ -15,6 +15,7 @@ wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 	init: function(c) {
 		this.app = c.app;
 		this.audioContext = this.getAudioContext();
+    this._lastResetTime = Date.now();
 		if (this.audioContext) {
 			this.hasAudioSupport = true;
 		} else {
@@ -22,7 +23,7 @@ wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 			wdi.Debug.warn('The client browser does not support Web Audio API');
 		}
 		this.startTime = 0;
-		this.typedBuffer = new ArrayBuffer(1024*32);
+		this.typedBuffer = new ArrayBuffer(this.minBuffSize);
 		this.position = 0;
 	},
 
@@ -68,7 +69,19 @@ wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 					var packet = spiceMessage.args;
 					var dataTimestamp = spiceMessage.args.multimedia_time;
 
-
+          // Check that tmpview buffer is large enough before stuffing the
+          // incomming audio data packet into it avoiding
+          //  RangeError: offset is out of bounds, but creating
+          //  a potentially ever expanding buffer (TODO add maxBuffSize)
+          var requiredSize = this.position + packet.data.length;
+          if (requiredSize > this.typedBuffer.byteLength) {
+              console.log("typedBuffer exceeds  requiredSize");
+              var newBuffer = new ArrayBuffer(requiredSize + this.minBuffSize); // adding additional space for future data
+              var tmpviewNew = new Uint8Array(newBuffer);
+              console.log("expanding buffer");
+              tmpviewNew.set(new Uint8Array(this.typedBuffer)); // copying old data to the new buffer
+              this.typedBuffer = newBuffer;
+          }
 					var tmpview = new Uint8Array(this.typedBuffer);
 					tmpview.set(packet.data, this.position);
 					this.position += packet.data.length;
@@ -94,12 +107,13 @@ wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 	 * @param dataTimestamp
 	 */
 	flush: function(dataTimestamp) {
+    console.log("Flushing audio...");
 		if(this.position > 0) {
 			if (this.started) {
 				this.playSound(this.typedBuffer, dataTimestamp);
 			}
 			this.position = 0;
-			this.typedBuffer = new ArrayBuffer(1024*32);
+			this.typedBuffer = new ArrayBuffer(this.minBuffSize);
 		}
 	},
 
@@ -173,7 +187,20 @@ wdi.PlaybackProcess = $.spcExtend(wdi.EventObject.prototype, {
 	},
 
 	_play: function(source, audioBuffer, dataTimestamp) {
+    var currentTime = Date.now();
+    var maxSeconds = 9000; //9 secs
 		var wait = 0;
+
+    // Check if maxSeconds have elapsed since the last reset
+    // This is to avoid the audio sync constantly falling behind
+    // admittedly in a crude way.
+    if (currentTime - this._lastResetTime >= maxSeconds) {
+      console.log("x time has lasped since audio sync reset");
+      this.startTime = 0; // reset the startTime
+      this._lastResetTime = currentTime; // update the last reset time
+      console.log("_lastResetTime has been reset");
+    }
+
 		if (dataTimestamp) {
 			var elapsedTime = Date.now() - this.app.lastMultimediaTime; // time passed since we received the last multimedia time from main channel
 			var currentMultimediaTime = elapsedTime + this.app.multimediaTime; // total delay we have at the moment

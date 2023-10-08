@@ -252,4 +252,42 @@ function closeIntegrationBenchmark () {
 	$('#integrationBenchmark').hide();
 }
 
-$(document).ready(start);
+$(document).ready(() => {
+  var $button = $('<button>Start</button>', {id: "startAudio"}).css({
+    padding: "10px 25px",
+    fontSize: "25px",
+    fontFamily: "Verdana",
+    cursor: "pointer",
+    margin: "0 auto"
+  }).click(function() {
+      console.log("Creating new AudioContext from user gesture");
+      audioContext = new AudioContext();
+      $('#soundButtonContainer').remove();
+      console.log("Starting application");
+      start();
+    });
+
+  var $messageContainer = $('<div id="messageContainer"><p>Click to start using your virtual session:</p></div>').css({
+    color: "white",
+    textAlign: "center",
+    fontSize: "25px",
+    fontFamily: "Verdana",
+    marginTop: "75px"
+  });
+
+  var $container = $('<div></div>', {id: "soundButtonContainer"});
+
+  $button.appendTo($messageContainer);
+  $messageContainer.appendTo($container);
+  $container.appendTo('body');
+
+  $container.css({
+    position: 'absolute',
+    zIndex: 999999999,
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: document.height,
+    backgroundColor: "black"
+  });
+});
